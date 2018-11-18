@@ -28,6 +28,17 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #endif
+#ifdef __vita__
+#define UNSUPPORT_IPV6
+#define IP_MULTICAST_TTL SCE_NET_IP_MULTICAST_TTL
+#define IP_ADD_MEMBERSHIP SCE_NET_IP_ADD_MEMBERSHIP
+#define IP_MULTICAST_LOOP SCE_NET_IP_MULTICAST_LOOP
+
+struct ip_mreq {
+	struct	in_addr imr_multiaddr;
+	struct	in_addr imr_interface;
+};
+#endif
 
 #define MDNS_INVALID_POS ((size_t)-1)
 
@@ -189,6 +200,10 @@ mdns_socket_setup_ipv4(int sock) {
 #ifdef _WIN32
 	unsigned long param = 1;
 	ioctlsocket(sock, FIONBIO, &param);
+#elif defined(__vita__)
+    unsigned int _true = 1;
+
+    setsockopt(sock, SOL_SOCKET, SCE_NET_SO_NBIO, (char *)&_true, sizeof(int));
 #else
 	const int flags = fcntl(sock, F_GETFL, 0);
 	fcntl(sock, F_SETFL, flags | O_NONBLOCK);
@@ -224,6 +239,7 @@ mdns_socket_open_ipv6(void) {
 
 static int
 mdns_socket_setup_ipv6(int sock) {
+#ifndef UNSUPPORT_IPV6
 	struct sockaddr_in6 saddr;
 	memset(&saddr, 0, sizeof(saddr));
 	saddr.sin6_family = AF_INET6;
@@ -256,6 +272,7 @@ mdns_socket_setup_ipv6(int sock) {
 	req.ipv6mr_multiaddr.s6_addr[15] = 0xFB;
 	if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, (char*)&req, sizeof(req)))
 		return -1;
+#endif
 
 	return 0;
 }
@@ -500,12 +517,15 @@ static const uint8_t mdns_services_query[] = {
 static int
 mdns_discovery_send(int sock) {
 	struct sockaddr_in addr;
+#ifndef UNSUPPORT_IPV6
 	struct sockaddr_in6 addr6;
+#endif
 	struct sockaddr* saddr = (struct sockaddr*)&addr;
 	socklen_t saddrlen = sizeof(struct sockaddr);
 	if (getsockname(sock, saddr, &saddrlen))
 		return -1;
 	if (saddr->sa_family == AF_INET6) {
+#ifndef UNSUPPORT_IPV6
 		memset(&addr6, 0, sizeof(struct sockaddr_in6));
 		addr6.sin6_family = AF_INET6;
 #ifdef __APPLE__
@@ -517,6 +537,7 @@ mdns_discovery_send(int sock) {
 		addr6.sin6_port = htons((unsigned short)5353);
 		saddr = (struct sockaddr*)&addr6;
 		saddrlen = sizeof(struct sockaddr_in6);
+#endif
 	}
 	else {
 		memset(&addr, 0, sizeof(struct sockaddr_in));
@@ -539,7 +560,11 @@ mdns_discovery_send(int sock) {
 static size_t
 mdns_discovery_recv(int sock, void* buffer, size_t capacity,
                     mdns_record_callback_fn callback) {
+#ifdef UNSUPPORT_IPV6
+	struct sockaddr_in addr;
+#else
 	struct sockaddr_in6 addr;
+#endif
 	struct sockaddr* saddr = (struct sockaddr*)&addr;
 	memset(&addr, 0, sizeof(addr));
 	saddr->sa_family = AF_INET;
@@ -648,12 +673,15 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 	*data++ = htons(0x8000U | MDNS_CLASS_IN);
 
 	struct sockaddr_in addr;
+#ifndef UNSUPPORT_IPV6
 	struct sockaddr_in6 addr6;
+#endif
 	struct sockaddr* saddr = (struct sockaddr*)&addr;
 	socklen_t saddrlen = sizeof(struct sockaddr);
 	if (getsockname(sock, saddr, &saddrlen))
 		return -1;
 	if (saddr->sa_family == AF_INET6) {
+#ifndef UNSUPPORT_IPV6
 		memset(&addr6, 0, sizeof(struct sockaddr_in6));
 		addr6.sin6_family = AF_INET6;
 #ifdef __APPLE__
@@ -665,6 +693,7 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 		addr6.sin6_port = htons((unsigned short)5353);
 		saddr = (struct sockaddr*)&addr6;
 		saddrlen = sizeof(struct sockaddr_in6);
+#endif
 	}
 	else {
 		memset(&addr, 0, sizeof(struct sockaddr_in));
@@ -687,7 +716,11 @@ mdns_query_send(int sock, mdns_record_type_t type, const char* name, size_t leng
 static size_t
 mdns_query_recv(int sock, void* buffer, size_t capacity,
                 mdns_record_callback_fn callback) {
+#ifndef UNSUPPORT_IPV6
 	struct sockaddr_in6 addr;
+#else
+	struct sockaddr_in addr;
+#endif
 	struct sockaddr* saddr = (struct sockaddr*)&addr;
 	memset(&addr, 0, sizeof(addr));
 	saddr->sa_family = AF_INET;
@@ -783,6 +816,7 @@ mdns_record_parse_a(const void* buffer, size_t size, size_t offset, size_t lengt
 	return addr;
 }
 
+#ifndef UNSUPPORT_IPV6
 static struct sockaddr_in6*
 mdns_record_parse_aaaa(const void* buffer, size_t size, size_t offset, size_t length,
                        struct sockaddr_in6* addr) {
@@ -795,6 +829,7 @@ mdns_record_parse_aaaa(const void* buffer, size_t size, size_t offset, size_t le
 		addr->sin6_addr = *(const struct in6_addr*)((const char*)buffer + offset);
 	return addr;
 }
+#endif
 
 static size_t
 mdns_record_parse_txt(const void* buffer, size_t size, size_t offset, size_t length,
