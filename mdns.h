@@ -30,14 +30,6 @@
 #endif
 #ifdef __vita__
 #define UNSUPPORT_IPV6
-#define IP_MULTICAST_TTL SCE_NET_IP_MULTICAST_TTL
-#define IP_ADD_MEMBERSHIP SCE_NET_IP_ADD_MEMBERSHIP
-#define IP_MULTICAST_LOOP SCE_NET_IP_MULTICAST_LOOP
-
-struct ip_mreq {
-	struct	in_addr imr_multiaddr;
-	struct	in_addr imr_interface;
-};
 #endif
 
 #define MDNS_INVALID_POS ((size_t)-1)
